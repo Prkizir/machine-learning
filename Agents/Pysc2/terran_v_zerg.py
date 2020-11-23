@@ -7,17 +7,15 @@ import random, time
 
 class TerranAgent(base_agent.BaseAgent):
 
-    def _init_(self):
-        super(TerranAgent, self)._init_()
+    def init(self):
+        super(TerranAgent, self).init()
         self.attack_coordinates = None
 
     def unit_type_is_selected(self, obs, unit_type):
         if (len(obs.observation.single_select) > 0 and obs.observation.single_select[0].unit_type == unit_type):
             return True
-
         if (len(obs.observation.multi_select) > 0 and obs.observation.multi_select[0].unit_type == unit_type):
             return True
-
         return False
 
     def get_units_by_type(self, obs, unit_type):
@@ -27,9 +25,6 @@ class TerranAgent(base_agent.BaseAgent):
         return action in obs.observation.available_actions
 
     def build_refinery(self, obs):
-        """
-        Build 2 Extractors
-        """
         neutral_vespene_geysers = self.get_units_by_type(obs, units.Neutral.VespeneGeyser)
         refineries = self.get_units_by_type(obs, units.Terran.Refinery)
 
@@ -46,10 +41,6 @@ class TerranAgent(base_agent.BaseAgent):
                 return actions.FUNCTIONS.select_point("select_all_type", (scv.x, scv.y))
 
     def gather_vespene_gas(self,obs):
-
-        """
-        Gather Vespene Gas
-        """
         refinery = self.get_units_by_type(obs, units.Terran.Refinery)
         if len(refinery) > 0:
             refinery = random.choice(refinery)
@@ -69,112 +60,74 @@ class TerranAgent(base_agent.BaseAgent):
     def step(self, obs):
         super(TerranAgent, self).step(obs)
 
+        if obs.first():
+            # CHECK SELF POSITION
+            player_y, player_x = (obs.observation.feature_minimap.player_relative == features.PlayerRelative.SELF).nonzero()
+            xmean = player_x.mean()
+            ymean = player_y.mean()
+
+            # CHECK ENEMY POSITION
+            if xmean <= 31 and ymean <= 31:
+                self.attack_coordinates = (49, 49)
+            else:
+                self.attack_coordinates = (12, 16)
+
+
+        minerals = obs.observation.player.minerals
+
+        # CREATE SUPPLY DEPOTS IN EVERY OPPORTUNITY (TO HAVE 3 IN TOTAL)
+        SupplyDepot = self.get_units_by_type(obs, units.Terran.SupplyDepot)
+        if len(SupplyDepot) < 3 and minerals >= 100:
+            if self.unit_type_is_selected(obs, units.Terran.SCV):
+                if self.can_do(obs, actions.FUNCTIONS.Build_SupplyDepot_screen.id):
+                    x = random.randint(0, 83)
+                    y = random.randint(0, 83)
+                    return actions.FUNCTIONS.Build_SupplyDepot_screen("now", (x, y))
+
+        # CREATE BARRACKS IN EVERY OPPORTUNITY (TO HAVE 3 IN TOTAL)
+        Barracks = self.get_units_by_type(obs, units.Terran.Barracks)
+        if len(Barracks) < 3 and minerals >= 150:
+            if self.unit_type_is_selected(obs, units.Terran.SCV):
+                if self.can_do(obs, actions.FUNCTIONS.Build_Barracks_screen.id):
+                    x = random.randint(0, 83)
+                    y = random.randint(0, 83)
+                    return actions.FUNCTIONS.Build_Barracks_screen("now", (x, y))
+
+        # ATTACK - MARINES (15 GROUP)
+        Marines = self.get_units_by_type(obs, units.Terran.Marine)
+        if len(Marines) >= 10:
+            if self.unit_type_is_selected(obs, units.Terran.Marine):
+                if self.can_do(obs, actions.FUNCTIONS.Attack_minimap.id):
+                    return actions.FUNCTIONS.Attack_minimap("now", self.attack_coordinates)
+            if self.can_do(obs, actions.FUNCTIONS.select_army.id):
+                return actions.FUNCTIONS.select_army("select")
+
+
+        # CREATE MARINES
+        if len(Barracks) >= 3:
+            if self.unit_type_is_selected(obs, units.Terran.Barracks):
+                Marines = self.get_units_by_type(obs, units.Terran.Marine)
+                if len(Marines) <= 15:
+                    if self.can_do(obs, actions.FUNCTIONS.Train_Marine_quick.id):
+                        return actions.FUNCTIONS.Train_Marine_quick("now")
+            b = random.choice(Barracks)
+            return actions.FUNCTIONS.select_point("select_all_type", (b.x, b.y))
+
         b_refinery = self.build_refinery(obs)
         if b_refinery:
             return b_refinery
+
+        # RECOLECTORS
+        Recolectors = self.get_units_by_type(obs, units.Terran.SCV)
+        if len(Recolectors) > 0:
+            scv = random.choice(Recolectors)
+            return actions.FUNCTIONS.select_point("select_all_type", (scv.x, scv.y))
 
         g_refinery = self.gather_vespene_gas(obs)
         if g_refinery:
             return g_refinery
 
         return actions.FUNCTIONS.no_op()
-
-
-
-# class TerranAgent(base_agent.BaseAgent):
-#
-#     def _init_(self):
-#         super(TerranAgent, self)._init_()
-#         self.attack_coordinates = None
-#
-#     def unit_type_is_selected(self, obs, unit_type):
-#         if (len(obs.observation.single_select) > 0 and obs.observation.single_select[0].unit_type == unit_type):
-#             return True
-#
-#         if (len(obs.observation.multi_select) > 0 and obs.observation.multi_select[0].unit_type == unit_type):
-#             return True
-#
-#         return False
-#
-#     def get_units_by_type(self, obs, unit_type):
-#         return [unit for unit in obs.observation.feature_units if unit.unit_type == unit_type]
-#
-#     def can_do(self, obs, action):
-#         return action in obs.observation.available_actions
-#
-#     def step(self, obs):
-#         super(TerranAgent, self).step(obs)
-#
-#         if obs.first():
-#             # CHECK SELF POSITION
-#             player_y, player_x = (obs.observation.feature_minimap.player_relative == features.PlayerRelative.SELF).nonzero()
-#             xmean = player_x.mean()
-#             ymean = player_y.mean()
-#
-#             # CHECK ENEMY POSITION
-#             if xmean <= 31 and ymean <= 31:
-#                 self.attack_coordinates = (49, 49)
-#             else:
-#                 self.attack_coordinates = (12, 16)
-#
-#
-#         minerals = obs.observation.player.minerals
-#
-#         # CREATE SUPPLY DEPOTS IN EVERY OPPORTUNITY (TO HAVE 3 IN TOTAL)
-#         SupplyDepot = self.get_units_by_type(obs, units.Terran.SupplyDepot)
-#         if len(SupplyDepot) < 3 and minerals >= 100:
-#             if self.unit_type_is_selected(obs, units.Terran.SCV):
-#                 if self.can_do(obs, actions.FUNCTIONS.Build_SupplyDepot_screen.id):
-#                     x = random.randint(0, 83)
-#                     y = random.randint(0, 83)
-#                     return actions.FUNCTIONS.Build_SupplyDepot_screen("now", (x, y))
-#
-#         # CREATE BARRACKS IN EVERY OPPORTUNITY (TO HAVE 5 IN TOTAL)
-#         Barracks = self.get_units_by_type(obs, units.Terran.Barracks)
-#         if len(Barracks) < 3 and minerals >= 150:
-#             if self.unit_type_is_selected(obs, units.Terran.SCV):
-#                 if self.can_do(obs, actions.FUNCTIONS.Build_Barracks_screen.id):
-#                     x = random.randint(0, 83)
-#                     y = random.randint(0, 83)
-#                     return actions.FUNCTIONS.Build_Barracks_screen("now", (x, y))
-#
-#         # ATTACK - MARINES (15 GROUP)
-#         Marines = self.get_units_by_type(obs, units.Terran.Marine)
-#         if len(Marines) >= 10:
-#             if self.unit_type_is_selected(obs, units.Terran.Marine):
-#                 if self.can_do(obs, actions.FUNCTIONS.Attack_minimap.id):
-#                     return actions.FUNCTIONS.Attack_minimap("now", self.attack_coordinates)
-#             if self.can_do(obs, actions.FUNCTIONS.select_army.id):
-#                 return actions.FUNCTIONS.select_army("select")
-#
-#
-#         # CREATE MARINES
-#         if len(Barracks) >= 3:
-#             if self.unit_type_is_selected(obs, units.Terran.Barracks):
-#                 Marines = self.get_units_by_type(obs, units.Terran.Marine)
-#                 if len(Marines) <= 15:
-#                     if self.can_do(obs, actions.FUNCTIONS.Train_Marine_quick.id):
-#                         return actions.FUNCTIONS.Train_Marine_quick("now")
-#
-#             b = random.choice(Barracks)
-#             return actions.FUNCTIONS.select_point("select_all_type", (b.x, b.y))
-#
-#         # CREATE REFINERIES IN EVERY OPPORTUNITY (TO HAVE 2 IN TOTAL)
-#         Refinery = self.get_units_by_type(obs, units.Terran.Refinery)
-#         if len(Barracks) > 2 and minerals >= 75 and len(Marines)>=10:
-#             if self.unit_type_is_selected(obs, units.Terran.SCV):
-#                 if self.can_do(obs, actions.FUNCTIONS.Build_Refinery_screen.id):
-#                     x = random.randint(0, 83)
-#                     y = random.randint(0, 83)
-#                     return actions.FUNCTIONS.Build_Refinery_screen("now", (x, y))
-#
-#         # RECOLECTORS
-#         Recolectors = self.get_units_by_type(obs, units.Terran.SCV)
-#         if len(Recolectors) > 0:
-#             scv = random.choice(Recolectors)
-#             return actions.FUNCTIONS.select_point("select_all_type", (scv.x, scv.y))
-#
-#         return actions.FUNCTIONS.no_op()
 
 class ZergAgent(base_agent.BaseAgent):
 
@@ -207,7 +160,7 @@ class ZergAgent(base_agent.BaseAgent):
         zerglings = self.get_units_by_type(obs, units.Zerg.Zergling)
         roaches = self.get_units_by_type(obs, units.Zerg.Roach)
 
-        if len(roaches) >= 5 or len(zerglings) >= 15:
+        if len(roaches) >= 5 or len(zerglings) >= 10:
             if self.unit_type_is_selected(obs, units.Zerg.Zergling):
                 if self.can_do(obs, actions.FUNCTIONS.Attack_minimap.id):
                     return actions.FUNCTIONS.Attack_minimap("now", self.attack_coordinates)
@@ -477,6 +430,12 @@ class ZergAgent(base_agent.BaseAgent):
         if launch_sequence_1:
             return launch_sequence_1
 
+        # Drones
+        drones = self.get_units_by_type(obs, units.Zerg.Drone)
+        if len(drones) < 8:
+            drone = self.morph_unit(obs, "drone")
+            if drone:
+                return drone
 
         """
         Resources Actions
@@ -496,27 +455,9 @@ class ZergAgent(base_agent.BaseAgent):
         if roach_warren:
             return roach_warren
 
-        # infestation_pit = self.build_structure(obs, "infestation_pit")
-        # if infestation_pit:
-        #     return infestation_pit
-        #
-        # spire = self.build_structure(obs, "spire")
-        # if spire:
-        #     return spire
-
-        """
-        Units Actions
-        """
-        # Drones
-        drones = self.get_units_by_type(obs, units.Zerg.Drone)
-        if len(drones) < 8:
-            drone = self.morph_unit(obs, "drone")
-            if drone:
-                return drone
-
         # Zerglings
         zerglings = self.get_units_by_type(obs, units.Zerg.Zergling)
-        if len(zerglings) < 20 and minerals >= 100:
+        if len(zerglings) < 20:
             zergling = self.morph_unit(obs, "zergling")
             if zergling:
                 return zergling
@@ -560,7 +501,7 @@ def main(unused_argv):
                 players=[
                     sc2_env.Agent(sc2_env.Race.zerg),
                     sc2_env.Agent(sc2_env.Race.terran)
-                    #sc2_env.Bot(sc2_env.Race.terran, sc2_env.Difficulty.very_easy)
+                    #sc2_env.Bot(sc2_env.Race.terran, sc2_env.Difficulty.easy)
                 ],
                 agent_interface_format=features.AgentInterfaceFormat(
                     feature_dimensions=features.Dimensions(screen=84, minimap=64),
